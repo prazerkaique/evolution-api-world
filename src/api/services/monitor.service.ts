@@ -239,26 +239,37 @@ export class WAMonitoringService {
   }
 
   public async saveInstance(data: any) {
+    const clientName = await this.configService.get<Database>('DATABASE').CONNECTION.CLIENT_NAME;
+
+    // O Prisma 7 recusa `undefined` explícito no data, então só mandamos o que existe.
+    const campos: Record<string, any> = {
+      id: data.instanceId,
+      name: data.instanceName,
+      connectionStatus:
+        data.integration && data.integration === Integration.WHATSAPP_BAILEYS ? 'close' : (data.status ?? 'open'),
+      integration: data.integration || Integration.WHATSAPP_BAILEYS,
+      token: data.hash,
+      clientName: clientName,
+    };
+
+    const opcionais = {
+      ownerJid: data.ownerJid,
+      profileName: data.profileName,
+      profilePicUrl: data.profilePicUrl,
+      number: data.number,
+      businessId: data.businessId,
+    };
+    for (const [chave, valor] of Object.entries(opcionais)) {
+      if (valor !== undefined) campos[chave] = valor;
+    }
+
     try {
-      const clientName = await this.configService.get<Database>('DATABASE').CONNECTION.CLIENT_NAME;
-      await this.prismaRepository.instance.create({
-        data: {
-          id: data.instanceId,
-          name: data.instanceName,
-          ownerJid: data.ownerJid,
-          profileName: data.profileName,
-          profilePicUrl: data.profilePicUrl,
-          connectionStatus:
-            data.integration && data.integration === Integration.WHATSAPP_BAILEYS ? 'close' : (data.status ?? 'open'),
-          number: data.number,
-          integration: data.integration || Integration.WHATSAPP_BAILEYS,
-          token: data.hash,
-          clientName: clientName,
-          businessId: data.businessId,
-        },
-      });
+      await this.prismaRepository.instance.create({ data: campos as any });
     } catch (error) {
+      // Engolir aqui fazia a criação seguir sem instância e estourar depois
+      // numa violação de chave estrangeira, escondendo a causa real.
       this.logger.error(error);
+      throw error;
     }
   }
 
