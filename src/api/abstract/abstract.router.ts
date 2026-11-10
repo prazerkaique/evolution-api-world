@@ -17,11 +17,14 @@ const logger = new Logger('Validate');
 
 const PROTECTED_INSTANCE_FIELDS = ['instanceName', 'instanceId'] as const;
 
-function sanitizeUntrustedInput(source: Record<string, any> | undefined): Record<string, any> {
+function sanitizeUntrustedInput(
+  source: Record<string, any> | undefined,
+  permitidos: readonly string[] = [],
+): Record<string, any> {
   if (!source || typeof source !== 'object') return {};
   const sanitized: Record<string, any> = {};
   for (const [key, value] of Object.entries(source)) {
-    if ((PROTECTED_INSTANCE_FIELDS as readonly string[]).includes(key)) {
+    if ((PROTECTED_INSTANCE_FIELDS as readonly string[]).includes(key) && !permitidos.includes(key)) {
       logger.warn(`Ignoring attempt to override protected field "${key}" via untrusted input`);
       continue;
     }
@@ -51,7 +54,11 @@ export abstract class RouterBroker {
     }
 
     if (request.originalUrl.includes('/instance/create')) {
-      Object.assign(instance, sanitizeUntrustedInput(body));
+      // A rota /instance/create não tem :instanceName no caminho, então o nome
+      // só pode vir do corpo. Protegê-lo aqui apagava a única origem dele e a
+      // criação morria com "Argument `name` is missing". O instanceId continua
+      // protegido: quem gera é o servidor.
+      Object.assign(instance, sanitizeUntrustedInput(body, ['instanceName']));
     }
 
     Object.assign(ref, body);
