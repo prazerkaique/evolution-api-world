@@ -77,6 +77,25 @@ export class SendPollDto extends Metadata {
 
 export type MediaType = 'image' | 'document' | 'video' | 'audio' | 'ptv';
 
+/** One item of an album: an image or a video, by URL or base64. */
+export class AlbumItem {
+  type?: 'image' | 'video';
+  /** url or base64 */
+  media: string;
+  /** Caption of this item alone. The album caption wins on the first one. */
+  caption?: string;
+}
+
+export class SendAlbumDto extends Metadata {
+  /**
+   * Two or more items. One item is not an album: it is a photo with a
+   * caption, and `sendMedia` already does that better.
+   */
+  media: AlbumItem[];
+  /** The caption of the album. It rides on the first item. */
+  caption?: string;
+}
+
 export class SendMediaDto extends Metadata {
   mediatype: MediaType;
   mimetype?: string;

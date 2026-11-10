@@ -40,6 +40,7 @@ import {
   KeyType,
   MediaMessage,
   Options,
+  SendAlbumDto,
   SendAudioDto,
   SendButtonsDto,
   SendCarouselDto,
@@ -2493,6 +2494,27 @@ export class BaileysStartupService extends ChannelStartupService {
       message['contextInfo'] = contextInfo;
     }
 
+    /**
+     * ALBUM: the parent and its children go straight to Baileys.
+     *
+     * The `forward` branch below rebuilds the content from scratch, and
+     * that drops `albumParentKey` - the only field that makes WhatsApp
+     * group the photos into a single swipeable block. Without it each
+     * photo lands as a separate message and the album is gone.
+     *
+     * `album` is the parent (it declares how many images follow) and
+     * `albumParentKey` marks each child. Both are plain Baileys content
+     * in 7.0.0-rc10 and up, so they only need to reach `sendMessage`
+     * untouched.
+     */
+    if (message['album'] || message['albumParentKey']) {
+      return await this.client.sendMessage(
+        sender,
+        { ...message, mentions } as unknown as AnyMessageContent,
+        option as unknown as MiscMessageGenerationOptions,
+      );
+    }
+
     if (message['conversation']) {
       return await this.client.sendMessage(
         sender,
@@ -3320,6 +3342,127 @@ export class BaileysStartupService extends ChannelStartupService {
     );
 
     return mediaSent;
+  }
+
+  /**
+   * ALBUM: several photos as ONE swipeable block, with a single caption.
+   *
+   * WhatsApp builds an album from two kinds of message:
+   *
+   *   1. the PARENT, which carries no media and only declares how many
+   *      images and videos are coming;
+   *   2. the CHILDREN, each pointing at the parent through
+   *      `albumParentKey`.
+   *
+   * The caption rides on the FIRST child, and the id returned here is
+   * that child's: quoting an album means quoting the photo that carries
+   * the text, not the empty parent.
+   *
+   * The protocol was confirmed against a real group before this route
+   * existed, in a standalone Baileys service built for the single
+   * purpose of sending albums - which is exactly what this route makes
+   * unnecessary.
+   */
+  public async albumMessage(data: SendAlbumDto, isIntegration = false) {
+    const items = (data.media ?? []).filter((item) => item?.media);
+
+    /**
+     * Two is the floor, and it is not arbitrary: a one-photo album is
+     * just a photo with a caption, and `sendMedia` already does that
+     * better - it handles every media type and every option.
+     */
+    if (items.length < 2) {
+      throw new BadRequestException('An album needs at least two media items');
+    }
+
+    /**
+     * Every file is fetched BEFORE anything is published.
+     *
+     * The parent announces how many images are coming. If the third URL
+     * is broken, it is far better to fail now, with the group still
+     * untouched, than halfway through - with a parent promising eight
+     * images and five having arrived.
+     */
+    const prepared: { buffer: Buffer; type: 'image' | 'video'; caption?: string }[] = [];
+    for (const item of items) {
+      const type = item.type === 'video' ? 'video' : 'image';
+      let buffer: Buffer;
+
+      if (isURL(item.media)) {
+        const response = await axios.get(item.media, { responseType: 'arraybuffer' });
+        buffer = Buffer.from(response.data, 'binary');
+      } else {
+        buffer = Buffer.from(item.media, 'base64');
+      }
+
+      prepared.push({ buffer, type, ...(item.caption ? { caption: item.caption } : {}) });
+    }
+
+    const images = prepared.filter((item) => item.type === 'image').length;
+    const videos = prepared.length - images;
+
+    /**
+     * The parent is sent raw, and on purpose it is NOT persisted.
+     *
+     * It carries no content: it is a protocol artifact that exists only
+     * so the children have something to point at. Storing it as a
+     * message and firing a webhook for it would hand every consumer an
+     * empty message to make sense of.
+     */
+    const jid = createJid(data.number);
+    const parent = await this.client.sendMessage(jid, {
+      album: { expectedImageCount: images, expectedVideoCount: videos },
+    } as unknown as AnyMessageContent);
+
+    if (!parent?.key) {
+      throw new BadRequestException('WhatsApp refused the album parent message');
+    }
+
+    /**
+     * The children go through the normal pipeline, so each photo is
+     * persisted, reaches the webhooks and honours `mentionsEveryOne`,
+     * `quoted` and `delay` exactly like any other message.
+     */
+    const sent = [];
+    for (const [index, item] of prepared.entries()) {
+      const caption = index === 0 ? (data.caption ?? item.caption) : item.caption;
+
+      try {
+        const message = await this.sendMessageWithTyping(
+          data.number,
+          {
+            [item.type]: item.buffer,
+            ...(caption ? { caption } : {}),
+            albumParentKey: parent.key,
+          },
+          {
+            delay: data?.delay,
+            presence: 'composing',
+            quoted: data?.quoted,
+            mentionsEveryOne: index === 0 ? data?.mentionsEveryOne : false,
+            mentioned: index === 0 ? data?.mentioned : undefined,
+          },
+          isIntegration,
+        );
+        sent.push(message);
+      } catch (error) {
+        /**
+         * Losing the FIRST child is losing the album: without it there
+         * is no caption in the group, and the whole thing has to be
+         * retried. From the second one on the album is already
+         * published, and retrying would republish the cover with the
+         * caption - so the rest is reported, never repeated.
+         */
+        if (index === 0) throw error;
+        this.logger.error(`album: media ${index + 1} of ${prepared.length} was left out`);
+      }
+    }
+
+    /**
+     * The FIRST child is the answer, because it is the one carrying the
+     * caption and the one anything quoting this offer must point at.
+     */
+    return sent[0];
   }
 
   public async ptvMessage(data: SendPtvDto, file?: any, isIntegration = false) {

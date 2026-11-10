@@ -1,5 +1,6 @@
 import { InstanceDto } from '@api/dto/instance.dto';
 import {
+  SendAlbumDto,
   SendAudioDto,
   SendButtonsDto,
   SendCarouselDto,
@@ -38,6 +39,10 @@ export class SendMessageController {
 
   public async sendText({ instanceName }: InstanceDto, data: SendTextDto) {
     return await this.waMonitor.waInstances[instanceName].textMessage(data);
+  }
+
+  public async sendAlbum({ instanceName }: InstanceDto, data: SendAlbumDto) {
+    return await this.waMonitor.waInstances[instanceName].albumMessage(data);
   }
 
   public async sendMedia({ instanceName }: InstanceDto, data: SendMediaDto, file?: any) {

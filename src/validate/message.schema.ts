@@ -92,6 +92,48 @@ export const textMessageSchema: JSONSchema7 = {
   required: ['number', 'text'],
 };
 
+export const albumMessageSchema: JSONSchema7 = {
+  $id: v4(),
+  type: 'object',
+  properties: {
+    number: { ...numberDefinition },
+    media: {
+      type: 'array',
+      // Two is the floor: one item is a photo with a caption, and
+      // `sendMedia` already handles that.
+      minItems: 2,
+      maxItems: 100,
+      items: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['image', 'video'] },
+          media: { type: 'string' },
+          caption: { type: 'string' },
+        },
+        required: ['media'],
+      },
+    },
+    caption: { type: 'string' },
+    delay: {
+      type: 'integer',
+      description: 'Enter a value in milliseconds',
+    },
+    quoted: { ...quotedOptionsSchema },
+    mentionsEveryOne: { type: 'boolean', enum: [true, false] },
+    mentioned: {
+      type: 'array',
+      minItems: 1,
+      uniqueItems: true,
+      items: {
+        type: 'string',
+        pattern: '^\\d+',
+        description: '"mentioned" must be an array of numeric strings',
+      },
+    },
+  },
+  required: ['number', 'media'],
+};
+
 export const mediaMessageSchema: JSONSchema7 = {
   $id: v4(),
   type: 'object',

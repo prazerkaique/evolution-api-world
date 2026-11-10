@@ -1,5 +1,6 @@
 import { RouterBroker } from '@api/abstract/abstract.router';
 import {
+  SendAlbumDto,
   SendAudioDto,
   SendButtonsDto,
   SendCarouselDto,
@@ -17,6 +18,7 @@ import {
 } from '@api/dto/sendMessage.dto';
 import { sendMessageController } from '@api/server.module';
 import {
+  albumMessageSchema,
   audioMessageSchema,
   buttonsMessageSchema,
   carouselMessageSchema,
@@ -59,6 +61,16 @@ export class MessageRouter extends RouterBroker {
           schema: textMessageSchema,
           ClassRef: SendTextDto,
           execute: (instance, data) => sendMessageController.sendText(instance, data),
+        });
+
+        return res.status(HttpStatus.CREATED).json(response);
+      })
+      .post(this.routerPath('sendAlbum'), ...guards, async (req, res) => {
+        const response = await this.dataValidate<SendAlbumDto>({
+          request: req,
+          schema: albumMessageSchema,
+          ClassRef: SendAlbumDto,
+          execute: (instance, data) => sendMessageController.sendAlbum(instance, data),
         });
 
         return res.status(HttpStatus.CREATED).json(response);
