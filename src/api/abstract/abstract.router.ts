@@ -46,7 +46,11 @@ export abstract class RouterBroker {
     const { request, schema, ClassRef, execute } = args;
 
     const ref = new ClassRef();
-    const body = request.body;
+    // O Express 5 deixa `body` indefinido quando o pedido nao tem corpo,
+    // e as rotas de grupo sao GET. Sem este `?? {}`, o `Object.assign`
+    // logo abaixo estoura com "Cannot convert undefined or null to object"
+    // e a rota inteira devolve 500.
+    const body = request.body ?? {};
     const instance = request.params as unknown as InstanceDto;
 
     if (request?.query && Object.keys(request.query).length > 0) {
@@ -89,7 +93,7 @@ export abstract class RouterBroker {
 
     const ref = new ClassRef();
 
-    Object.assign(ref, request.body);
+    Object.assign(ref, request.body ?? {});
 
     const v = validate(ref, schema);
 
@@ -117,7 +121,11 @@ export abstract class RouterBroker {
     const { request, ClassRef, schema, execute } = args;
 
     const instance = request.params as unknown as InstanceDto;
-    const body = request.body;
+    // O Express 5 deixa `body` indefinido quando o pedido nao tem corpo,
+    // e as rotas de grupo sao GET. Sem este `?? {}`, o `Object.assign`
+    // logo abaixo estoura com "Cannot convert undefined or null to object"
+    // e a rota inteira devolve 500.
+    const body = request.body ?? {};
 
     let groupJid = body?.groupJid;
 
@@ -176,7 +184,11 @@ export abstract class RouterBroker {
     }
 
     const instance = request.params as unknown as InstanceDto;
-    const body = request.body;
+    // O Express 5 deixa `body` indefinido quando o pedido nao tem corpo,
+    // e as rotas de grupo sao GET. Sem este `?? {}`, o `Object.assign`
+    // logo abaixo estoura com "Cannot convert undefined or null to object"
+    // e a rota inteira devolve 500.
+    const body = request.body ?? {};
 
     const ref = new ClassRef();
 
@@ -215,7 +227,11 @@ export abstract class RouterBroker {
     }
 
     const instance = request.params as unknown as InstanceDto;
-    const body = request.body;
+    // O Express 5 deixa `body` indefinido quando o pedido nao tem corpo,
+    // e as rotas de grupo sao GET. Sem este `?? {}`, o `Object.assign`
+    // logo abaixo estoura com "Cannot convert undefined or null to object"
+    // e a rota inteira devolve 500.
+    const body = request.body ?? {};
 
     const ref = new ClassRef();
 
